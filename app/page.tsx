@@ -54,6 +54,7 @@ export default function Chat() {
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showContextMemory, setShowContextMemory] = useState(false);
+  const [intakeOpen, setIntakeOpen] = useState(true);
   const welcomeMessageShownRef = useRef<boolean>(false);
 
   // Compaction state: stored summary persists across requests
@@ -195,6 +196,7 @@ export default function Chat() {
   // Guided intake: the ArbitrageIntakeForm composes one well-formed message
   // from its three fields and sends it exactly like a typed message would.
   function handleGuidedSubmit(message: string) {
+    setIntakeOpen(false);
     const s = summaryRef.current;
     sendMessage({
       text: message,
@@ -402,9 +404,6 @@ export default function Chat() {
                     }))
                   }
                 />
-                <div className="max-w-3xl w-full mt-3" hidden={status !== "ready"}>
-                  <ArbitrageIntakeForm onSubmit={handleGuidedSubmit} />
-                </div>
                 {status === "submitted" && (
                   <div className="max-w-3xl w-full">
                     <ThinkingIndicator isCompacting={(() => {
@@ -428,6 +427,19 @@ export default function Chat() {
         <div className="fixed bottom-0 left-0 right-0 z-50 overflow-visible bg-linear-to-t from-background via-background/60 to-transparent pt-6 pb-3">
           <div className="relative mx-auto max-w-3xl px-3 sm:px-5">
             <div className="message-fade-overlay" />
+
+            <div className="mb-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIntakeOpen((o) => !o)}
+                className="text-xs font-medium rounded-full border border-primary/50 bg-card px-3 py-1 text-primary hover:bg-primary/10"
+              >
+                {intakeOpen ? "Hide quick check" : "Edit inputs & check again"}
+              </button>
+            </div>
+            <div className="max-h-[45vh] overflow-y-auto mb-2" hidden={!intakeOpen || status !== "ready"}>
+              <ArbitrageIntakeForm onSubmit={handleGuidedSubmit} />
+            </div>
 
             <form onSubmit={form.handleSubmit(onSubmit)}>
               <FieldGroup>
