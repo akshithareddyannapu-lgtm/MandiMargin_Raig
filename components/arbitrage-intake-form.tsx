@@ -64,6 +64,7 @@ export function ArbitrageIntakeForm({
               {DISTRICTS.map((d) => (
                 <SelectItem key={d.id} value={d.id}>
                   {d.name}
+                  {!d.verified && <span className="ml-1 text-xs text-muted-foreground">(unverified)</span>}
                 </SelectItem>
               ))}
             </SelectContent>

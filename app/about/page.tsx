@@ -55,14 +55,17 @@ export default function About() {
         <section className="space-y-3">
           <h2 className="text-2xl font-semibold text-foreground">Where it works</h2>
           <p className="text-muted-foreground">
-            Covers {DISTRICTS.length} rice-growing districts across Andhra Pradesh and Telangana. Built for independent rice merchants and mill owners in these districts.
+            Covers {DISTRICTS.length} districts across Andhra Pradesh and Telangana. Districts marked (unverified) do not yet have their neighbor list confirmed against an official government district page, so their comparisons are less reliable. Reference prices are the government's 2025-26 minimum support price for paddy, not live mandi prices.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-xl border bg-card p-4">
               <h3 className="font-semibold text-foreground mb-2">Andhra Pradesh ({APP_DISTRICTS.length})</h3>
               <ul className="text-sm text-muted-foreground grid grid-cols-2 gap-x-3 gap-y-1">
                 {APP_DISTRICTS.map((d) => (
-                  <li key={d.id}>{d.name}</li>
+                  <li key={d.id}>
+                    {d.name}
+                    {!d.verified && <span className="ml-1 text-xs">(unverified)</span>}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -70,7 +73,10 @@ export default function About() {
               <h3 className="font-semibold text-foreground mb-2">Telangana ({TG_DISTRICTS.length})</h3>
               <ul className="text-sm text-muted-foreground grid grid-cols-2 gap-x-3 gap-y-1">
                 {TG_DISTRICTS.map((d) => (
-                  <li key={d.id}>{d.name}</li>
+                  <li key={d.id}>
+                    {d.name}
+                    {!d.verified && <span className="ml-1 text-xs">(unverified)</span>}
+                  </li>
                 ))}
               </ul>
             </div>
