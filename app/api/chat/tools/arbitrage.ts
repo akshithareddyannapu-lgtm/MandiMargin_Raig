@@ -24,6 +24,7 @@ import {
   findDistrict,
   neighborsOf,
   roadDistanceKm,
+  FALLBACK_DATASET_AS_OF,
   type DistrictInfo,
 } from "@/lib/districts";
 import { EXA_MAX_CHARACTERS } from "@/config";
@@ -42,6 +43,9 @@ export interface PriceQuote {
   sourceTitle: string;
   sourceUrl: string;
   asOf: string; // ISO date string
+  ageDays: number; // days between `asOf` and now
+  confidenceTier: "fresh" | "aging" | "stale"; // same day / 1 day old / 2+ days old
+  fallbackReason?: "fetch-error" | "no-parseable-price"; // only set when live === false
 }
 
 export interface ArbitrageOption {
@@ -63,6 +67,54 @@ export interface ArbitrageResult {
   options: ArbitrageOption[];
   recommendedDistrictId: string;
   upliftVsOrigin: number;
+  upliftPerQuintal: number;
+  recommendationStrength: "strong" | "marginal" | "none";
+  dataConfidence: "fresh" | "aging" | "stale";
+}
+
+// Static explanation content (not per-request data) surfaced in the result
+// card's "how this was calculated" disclosure — see components/messages/arbitrage-card.tsx.
+export const PRICING_METHODOLOGY_NOTE =
+  "Prices are found by searching mandi/Agmarknet listings for each district and extracting a rupees-per-quintal figure in the ₹1,200–5,500 band. If no such figure can be reliably extracted, the tool falls back to a seeded reference dataset rather than guessing.";
+
+function ageDaysOf(asOfISODate: string): number {
+  return Math.max(0, Math.floor((Date.now() - new Date(asOfISODate).getTime()) / 86_400_000));
+}
+
+function confidenceTierOf(ageDays: number): "fresh" | "aging" | "stale" {
+  if (ageDays <= 0) return "fresh";
+  if (ageDays === 1) return "aging";
+  return "stale";
+}
+
+// A recommendation is only as good as the merchant's ability to tell whether
+// the gain is real or within the market's normal day-to-day noise. Thresholds
+// are anchored to the team's 14-merchant field test (DOCUMENTATION.md C6):
+// test #6 showed the "best" district itself flipping within one hour from
+// ordinary price movement, so gaps near ₹20/quintal are inside that noise
+// band; test #9's ₹50 total uplift (well under both floors here) is exactly
+// the case a merchant couldn't judge without this signal.
+const MARGINAL_ABS_THRESHOLD_INR = 500;
+const MARGINAL_PER_QUINTAL_THRESHOLD_INR = 20;
+
+function recommendationStrengthOf(
+  upliftVsOrigin: number,
+  upliftPerQuintal: number
+): "strong" | "marginal" | "none" {
+  if (upliftVsOrigin <= 0) return "none";
+  if (upliftVsOrigin >= MARGINAL_ABS_THRESHOLD_INR && upliftPerQuintal >= MARGINAL_PER_QUINTAL_THRESHOLD_INR) {
+    return "strong";
+  }
+  return "marginal";
+}
+
+// Worse of two confidence tiers (fresh < aging < stale).
+function worseTier(
+  a: "fresh" | "aging" | "stale",
+  b: "fresh" | "aging" | "stale"
+): "fresh" | "aging" | "stale" {
+  const order = { fresh: 0, aging: 1, stale: 2 } as const;
+  return order[a] >= order[b] ? a : b;
 }
 
 function extractPricePerQuintal(text: string): number | null {
@@ -85,14 +137,29 @@ function extractPricePerQuintal(text: string): number | null {
   return null;
 }
 
-async function fetchLivePrice(district: DistrictInfo): Promise<PriceQuote> {
-  const fallback: PriceQuote = {
+function fallbackQuote(
+  district: DistrictInfo,
+  reason: "fetch-error" | "no-parseable-price"
+): PriceQuote {
+  // FALLBACK_DATASET_AS_OF, not today — these are static seed prices, and
+  // stamping them with the current date was the exact bug behind a real
+  // trust failure in the team's field test (DOCUMENTATION.md C6, test #5):
+  // the "ref." tag existed, but the date next to it never revealed how old
+  // the number actually was.
+  const ageDays = ageDaysOf(FALLBACK_DATASET_AS_OF);
+  return {
     pricePerQuintal: district.fallbackPricePerQuintal,
     live: false,
     sourceTitle: "Reference price (not live — sample dataset)",
     sourceUrl: "",
-    asOf: new Date().toISOString().slice(0, 10),
+    asOf: FALLBACK_DATASET_AS_OF,
+    ageDays,
+    confidenceTier: confidenceTierOf(ageDays),
+    fallbackReason: reason,
   };
+}
+
+async function fetchLivePrice(district: DistrictInfo): Promise<PriceQuote> {
   try {
     const exa = getExa();
     const response = (await exa.search(
@@ -110,19 +177,23 @@ async function fetchLivePrice(district: DistrictInfo): Promise<PriceQuote> {
       const text: string = r.text || "";
       const price = extractPricePerQuintal(text);
       if (price) {
+        const asOf = (r.publishedDate || new Date().toISOString()).slice(0, 10);
+        const ageDays = ageDaysOf(asOf);
         return {
           pricePerQuintal: price,
           live: true,
           sourceTitle: r.title || domainOf(r.url),
           sourceUrl: r.url,
-          asOf: (r.publishedDate || new Date().toISOString()).slice(0, 10),
+          asOf,
+          ageDays,
+          confidenceTier: confidenceTierOf(ageDays),
         };
       }
     }
-    return fallback;
+    return fallbackQuote(district, "no-parseable-price");
   } catch (error) {
     console.error(`arbitrage: price fetch failed for ${district.name}:`, error);
-    return fallback;
+    return fallbackQuote(district, "fetch-error");
   }
 }
 
@@ -197,6 +268,9 @@ export function createArbitrageCalculator(collect: (s: UISource, content?: strin
       const best = options[0];
       const originOption = options.find((o) => o.isOrigin)!;
 
+      const upliftVsOrigin = best.netProfit - originOption.netProfit;
+      const upliftPerQuintal = upliftVsOrigin / (quantityKg / 100);
+
       const result: ArbitrageResult = {
         originDistrict: origin.name,
         quantityKg,
@@ -204,7 +278,10 @@ export function createArbitrageCalculator(collect: (s: UISource, content?: strin
         generatedAt: new Date().toISOString(),
         options,
         recommendedDistrictId: best.districtId,
-        upliftVsOrigin: best.netProfit - originOption.netProfit,
+        upliftVsOrigin,
+        upliftPerQuintal,
+        recommendationStrength: recommendationStrengthOf(upliftVsOrigin, upliftPerQuintal),
+        dataConfidence: worseTier(originOption.price.confidenceTier, best.price.confidenceTier),
       };
       return result;
     },

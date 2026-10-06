@@ -237,5 +237,16 @@ export function roadDistanceKm(a: DistrictInfo, b: DistrictInfo): number {
   return haversineKm(a.lat, a.lon, b.lat, b.lon) * ROAD_DISTANCE_FACTOR;
 }
 
+// When the seeded fallbackPricePerQuintal values above were last manually set.
+// Used to compute a real age for fallback price quotes instead of stamping
+// them with today's date — see app/api/chat/tools/arbitrage.ts PriceQuote.
+export const FALLBACK_DATASET_AS_OF = "2026-09-05";
+
+export const DISTANCE_METHODOLOGY_NOTE =
+  `Distance is estimated from straight-line coordinates between district centers, multiplied by a fixed ${ROAD_DISTANCE_FACTOR}x factor to approximate road routing — not a turn-by-turn route, and it can differ from the real distance for a specific pair of towns.`;
+
+export const ADJACENCY_METHODOLOGY_NOTE =
+  "Neighboring districts are a hand-curated list, not a computed GIS boundary check — a small number of genuine neighbors may be missing.";
+
 /** All district display names, for prompt guidance / error messages. */
 export const DISTRICT_NAMES = DISTRICTS.map((d) => d.name);

@@ -18,6 +18,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: BROWSER_TAB_TITLE,
   description: AI_DESCRIPTION,
+  themeColor: "#16a34a",
 };
 
 export default function RootLayout({
