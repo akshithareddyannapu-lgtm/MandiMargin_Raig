@@ -331,7 +331,11 @@ export default function Chat() {
                 <PanelLeft className="size-4" />
               </Button>
             </ChatHeaderBlock>
-            <ChatHeaderBlock className="justify-center items-center" />
+            <ChatHeaderBlock className="justify-center items-center">
+              <Link href="/about" className="text-sm font-medium text-primary underline underline-offset-4">
+                About MandiMargin
+              </Link>
+            </ChatHeaderBlock>
 
             <ChatHeaderBlock className="justify-end gap-2">
               {/* Context Memory dropdown (toggle via COMPACTION_SHOW_CONTEXT_MEMORY in config) */}
@@ -398,11 +402,9 @@ export default function Chat() {
                     }))
                   }
                 />
-                {messages.length <= 1 && status === "ready" && (
-                  <div className="max-w-3xl w-full mt-3">
-                    <ArbitrageIntakeForm onSubmit={handleGuidedSubmit} />
-                  </div>
-                )}
+                <div className="max-w-3xl w-full mt-3" hidden={status !== "ready"}>
+                  <ArbitrageIntakeForm onSubmit={handleGuidedSubmit} />
+                </div>
                 {status === "submitted" && (
                   <div className="max-w-3xl w-full">
                     <ThinkingIndicator isCompacting={(() => {
